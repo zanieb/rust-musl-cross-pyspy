@@ -81,6 +81,25 @@ RUN export CC=$TARGET_CC && \
     make -j$(nproc) && make install && \
     cd .. && rm -rf zlib-$VERS.tar.gz zlib-$VERS checksums.txt
 
+# we also need libunwind / libunwind-ptrace built in addition
+COPY libunwind.patch /home/rust/libs
+RUN export CC=$TARGET_CC && \
+    export C_INCLUDE_PATH=$TARGET_C_INCLUDE_PATH && \
+    export LDFLAGS="-fPIE" && \
+    export CFLAGS="-fPIE" && \
+    echo "Building libunwind" && \
+    VERS=1.5.0 && DOWNLOAD_VERS=1.5 && \
+    CHECKSUM=90337653d92d4a13de590781371c604f9031cdb50520366aa1e3a91e1efb1017 && \
+    cd /home/rust/libs && \
+    curl -sqLO https://github.com/libunwind/libunwind/releases/download/v$DOWNLOAD_VERS/libunwind-$VERS.tar.gz && \
+    echo "$CHECKSUM libunwind-$VERS.tar.gz" > checksums.txt && \
+    sha256sum -c checksums.txt && \
+    tar xzf libunwind-$VERS.tar.gz && cd libunwind-$VERS && \
+    patch -p1 -i ../libunwind.patch && \
+    ./configure --prefix=$TARGET_HOME --disable-minidebuginfo --enable-ptrace --disable-tests --disable-documentation --host $TARGET --enable-shared=no  && \
+    make && make install && \
+    cd .. && rm -rf libunwind-$VERS.tar.gz libunwind-$VERS checksums.txt libunwind.patch
+
 # The Rust toolchain to use when building our image
 ARG TOOLCHAIN=stable
 # Install our Rust toolchain and the `musl` target.  We patch the
