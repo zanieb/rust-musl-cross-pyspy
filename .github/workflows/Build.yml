@@ -233,6 +233,11 @@ jobs:
           TARGET: s390x-unknown-linux-musl
           RUST_MUSL_MAKE_CONFIG: config.mak
           TOOLCHAIN: nightly
+        - IMAGE_TAG: riscv64gc-musl
+          TARGET: riscv64gc-unknown-linux-musl
+          MUST_TARGET: riscv64-unknown-linux-musl
+          RUST_MUSL_MAKE_CONFIG: config.mak
+          TOOLCHAIN: nightly
         - IMAGE_TAG: x86_64-musl
           TARGET: x86_64-unknown-linux-musl
           RUST_MUSL_MAKE_CONFIG: config.mak
@@ -274,6 +279,7 @@ jobs:
           platforms: linux/${{ matrix.os.docker_arch || matrix.os.arch }}
           build-args: |
             TARGET=${{ matrix.env.TARGET }}
+            MUSL_TARGET=${{ matrix.env.MUSL_TARGET || matrix.env.TARGET }}
             RUST_MUSL_MAKE_CONFIG=${{ matrix.env.RUST_MUSL_MAKE_CONFIG }}
             TOOLCHAIN=${{ matrix.env.TOOLCHAIN }}
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross:${{ matrix.env.IMAGE_TAG }}-${{ matrix.os.arch }}

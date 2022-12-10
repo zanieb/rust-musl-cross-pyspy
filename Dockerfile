@@ -35,7 +35,8 @@ COPY lets-encrypt-r3.crt /usr/local/share/ca-certificates
 RUN update-ca-certificates
 
 ARG TARGET=x86_64-unknown-linux-musl
-ENV RUST_MUSL_CROSS_TARGET=$TARGET
+ARG MUSL_TARGET=$TARGET
+ENV RUST_MUSL_CROSS_TARGET=$MUSL_TARGET
 ARG RUST_MUSL_MAKE_CONFIG=config.mak
 
 COPY $RUST_MUSL_MAKE_CONFIG /tmp/config.mak
@@ -43,7 +44,7 @@ RUN cd /tmp && \
     git clone --depth 1 https://github.com/richfelker/musl-cross-make.git && \
     cp /tmp/config.mak /tmp/musl-cross-make/config.mak && \
     cd /tmp/musl-cross-make && \
-    export TARGET=$TARGET && \
+    export TARGET=$MUSL_TARGET && \
     if [ `dpkg --print-architecture` = 'armhf' ] && [ `uname -m` = 'aarch64' ]; then SETARCH=linux32; else SETARCH= ; fi && \
     $SETARCH make -j$(nproc) > /tmp/musl-cross-make.log && \
     $SETARCH make install >> /tmp/musl-cross-make.log && \
@@ -56,11 +57,11 @@ RUN mkdir -p /home/rust/libs /home/rust/src
 # Set up our path with all our binary directories, including those for the
 # musl-gcc toolchain and for our Rust toolchain.
 ENV PATH=/root/.cargo/bin:/usr/local/musl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ENV TARGET_CC=$TARGET-gcc
-ENV TARGET_CXX=$TARGET-g++
-ENV TARGET_AR=$TARGET-ar
-ENV TARGET_RANLIB=$TARGET-ranlib
-ENV TARGET_HOME=/usr/local/musl/$TARGET
+ENV TARGET_CC=$MUSL_TARGET-gcc
+ENV TARGET_CXX=$MUSL_TARGET-g++
+ENV TARGET_AR=$MUSL_TARGET-ar
+ENV TARGET_RANLIB=$MUSL_TARGET-ranlib
+ENV TARGET_HOME=/usr/local/musl/$MUSL_TARGET
 ENV TARGET_C_INCLUDE_PATH=$TARGET_HOME/include/
 
 # pkg-config cross compilation support
@@ -108,7 +109,7 @@ RUN chmod 755 /root/ && \
     rustup component add --toolchain $TOOLCHAIN rustfmt clippy && \
     rm -rf /root/.rustup/toolchains/$TOOLCHAIN-$GNU_TARGET/share/
 
-RUN echo "[target.$TARGET]\nlinker = \"$TARGET-gcc\"\n" > /root/.cargo/config
+RUN echo "[target.$TARGET]\nlinker = \"$TARGET_CC\"\n" > /root/.cargo/config
 
 # Build std sysroot for targets that doesn't have official std release
 ADD Xargo.toml /tmp/Xargo.toml
