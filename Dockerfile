@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -36,19 +36,26 @@ RUN update-ca-certificates
 
 ARG TARGET=x86_64-unknown-linux-musl
 ENV RUST_MUSL_CROSS_TARGET=$TARGET
-ARG RUST_MUSL_MAKE_VER=0.9.9
 ARG RUST_MUSL_MAKE_CONFIG=config.mak
 
 COPY $RUST_MUSL_MAKE_CONFIG /tmp/config.mak
-RUN cd /tmp && curl -Lsq -o musl-cross-make.zip https://github.com/richfelker/musl-cross-make/archive/v$RUST_MUSL_MAKE_VER.zip && \
-    unzip -q musl-cross-make.zip && \
-    rm musl-cross-make.zip && \
-    mv musl-cross-make-$RUST_MUSL_MAKE_VER musl-cross-make && \
+# Fix the cfi detection script in musl's configure so cfi is generated
+# when debug info is asked for. This patch is derived from
+# https://git.musl-libc.org/cgit/musl/commit/?id=c4d4028dde90562f631edf559fbc42d8ec1b29de.
+# When we upgrade to a version that includes this commit, we can remove the patch.
+COPY musl-patch-configure.diff /tmp/musl-patch-configure.diff
+
+RUN cd /tmp && \
+    git clone --depth 1 https://github.com/richfelker/musl-cross-make.git && \
     cp /tmp/config.mak /tmp/musl-cross-make/config.mak && \
     cd /tmp/musl-cross-make && \
+    mkdir patches/musl-1.1.24 && \
+    cp /tmp/musl-patch-configure.diff patches/musl-1.1.24/0001-fix-cfi-detection.diff && \
+    export CFLAGS="-fPIC -g1 $CFLAGS" && \
     export TARGET=$TARGET && \
-    make -j$(nproc) > /tmp/musl-cross-make.log && \
-    make install >> /tmp/musl-cross-make.log && \
+    if [ `dpkg --print-architecture` = 'armhf' ] && [ `uname -m` = 'aarch64' ]; then SETARCH=linux32; else SETARCH= ; fi && \
+    $SETARCH make -j$(nproc) > /tmp/musl-cross-make.log && \
+    $SETARCH make install >> /tmp/musl-cross-make.log && \
     ln -s /usr/local/musl/bin/$TARGET-strip /usr/local/musl/bin/musl-strip && \
     cd /tmp && \
     rm -rf /tmp/musl-cross-make /tmp/musl-cross-make.log
@@ -60,8 +67,16 @@ RUN mkdir -p /home/rust/libs /home/rust/src
 ENV PATH=/root/.cargo/bin:/usr/local/musl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV TARGET_CC=$TARGET-gcc
 ENV TARGET_CXX=$TARGET-g++
+ENV TARGET_AR=$TARGET-ar
+ENV TARGET_RANLIB=$TARGET-ranlib
 ENV TARGET_HOME=/usr/local/musl/$TARGET
 ENV TARGET_C_INCLUDE_PATH=$TARGET_HOME/include/
+
+# pkg-config cross compilation support
+ENV TARGET_PKG_CONFIG_ALLOW_CROSS=1
+ENV TARGET_PKG_CONFIG_SYSROOT_DIR=$TARGET_HOME
+ENV TARGET_PKG_CONFIG_PATH=$TARGET_HOME/lib/pkgconfig:/usr/local/musl/lib/pkgconfig
+ENV TARGET_PKG_CONFIG_LIBDIR=$TARGET_PKG_CONFIG_PATH
 
 # We'll build our libraries in subdirectories of /home/rust/libs.  Please
 # clean up when you're done.
@@ -69,15 +84,17 @@ WORKDIR /home/rust/libs
 
 RUN export CC=$TARGET_CC && \
     export C_INCLUDE_PATH=$TARGET_C_INCLUDE_PATH && \
+    export AR=$TARGET_AR && \
+    export RANLIB=$TARGET_RANLIB && \
     echo "Building zlib" && \
-    VERS=1.2.11 && \
-    CHECKSUM=c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1 && \
+    VERS=1.2.13 && \
+    CHECKSUM=b3a24de97a8fdbc835b9833169501030b8977031bcb54b3b3ac13740f846ab30 && \
     cd /home/rust/libs && \
     curl -sqLO https://zlib.net/zlib-$VERS.tar.gz && \
     echo "$CHECKSUM zlib-$VERS.tar.gz" > checksums.txt && \
     sha256sum -c checksums.txt && \
     tar xzf zlib-$VERS.tar.gz && cd zlib-$VERS && \
-    ./configure --static --archs="-fPIC" --prefix=$TARGET_HOME && \
+    CFLAGS="-O3 -fPIC" ./configure --static --prefix=$TARGET_HOME && \
     make -j$(nproc) && make install && \
     cd .. && rm -rf zlib-$VERS.tar.gz zlib-$VERS checksums.txt
 
@@ -111,16 +128,19 @@ ARG TOOLCHAIN=stable
 #
 # Remove docs and more stuff not needed in this images to make them smaller
 RUN chmod 755 /root/ && \
+    if [ `dpkg --print-architecture` = 'armhf' ]; then GNU_TARGET="armv7-unknown-linux-gnueabihf"; else GNU_TARGET=`uname -m`-unknown-linux-gnu; fi && \
+    export RUSTUP_USE_CURL=1 && \
     curl https://sh.rustup.rs -sqSf | \
-    sh -s -- -y --profile minimal --default-toolchain $TOOLCHAIN && \
+    sh -s -- -y --profile minimal --default-toolchain $TOOLCHAIN --default-host $GNU_TARGET && \
     rustup target add $TARGET || rustup component add --toolchain $TOOLCHAIN rust-src && \
     rustup component add --toolchain $TOOLCHAIN rustfmt clippy && \
-    rm -rf /root/.rustup/toolchains/$TOOLCHAIN-$(uname -m)-unknown-linux-gnu/share/
+    rm -rf /root/.rustup/toolchains/$TOOLCHAIN-$GNU_TARGET/share/
 
 RUN echo "[target.$TARGET]\nlinker = \"$TARGET-gcc\"\n" > /root/.cargo/config
 
 # Build std sysroot for targets that doesn't have official std release
 ADD Xargo.toml /tmp/Xargo.toml
+ADD s390x-unwind.patch /tmp/s390x-unwind.patch
 ADD build-std.sh .
 COPY compile-libunwind /tmp/compile-libunwind
 RUN bash build-std.sh
