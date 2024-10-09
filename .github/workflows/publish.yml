@@ -13,11 +13,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: all
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -33,7 +28,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:x86_64-musl
 
       - name: Build and Push aarch64-unknown-linux-musl
@@ -41,7 +35,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/arm64
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:aarch64-musl
           build-args: |
             TARGET=aarch64-unknown-linux-musl
@@ -52,7 +45,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/arm/v7
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:armv7-musleabihf
           build-args: |
             TARGET=armv7-unknown-linux-musleabihf
@@ -63,7 +55,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/386
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:i686-musl
           build-args: |
             TARGET=i686-unknown-linux-musl
@@ -74,7 +65,6 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/ppc64le
           tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:powerpc64le-musl
           build-args: |
             TARGET=powerpc64le-unknown-linux-musl
