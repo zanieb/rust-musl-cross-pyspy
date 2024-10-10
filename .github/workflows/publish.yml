@@ -8,7 +8,13 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        target:
+            - x86_64-unknown-linux-musl
+            - aarch64-unknown-linux-musl
+            - armv7-unknown-linux-musleabihf
+            - i686-unknown-linux-musl
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -23,50 +29,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push x86_64-unknown-linux-musl
+      - name: Build and Push ${{ matrix.target }}
         uses: docker/build-push-action@v4
         with:
           context: .
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:x86_64-musl
-
-      - name: Build and Push aarch64-unknown-linux-musl
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:aarch64-musl
+          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross:${{ matrix.target }}
           build-args: |
-            TARGET=aarch64-unknown-linux-musl
+            TARGET=${{ matrix.target }}
             RUST_MUSL_MAKE_CONFIG=config.mak
-
-      - name: Build and Push armv7-unknown-linux-musleabihf
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:armv7-musleabihf
-          build-args: |
-            TARGET=armv7-unknown-linux-musleabihf
-            RUST_MUSL_MAKE_CONFIG=config.mak
-
-      - name: Build and Push i686-unknown-linux-musl
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:i686-musl
-          build-args: |
-            TARGET=i686-unknown-linux-musl
-            RUST_MUSL_MAKE_CONFIG=config.mak
-
-      - name: Build and Push powerpc64le-unknown-linux-musl
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/rust-musl-cross-pyspy:powerpc64le-musl
-          build-args: |
-            TARGET=powerpc64le-unknown-linux-musl
-            RUST_MUSL_MAKE_CONFIG=config.mak
-            TOOLCHAIN=nightly
